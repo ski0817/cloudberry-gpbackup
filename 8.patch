@@ -1,0 +1,163 @@
+From 5fbc657d5949ada58d6333f68e750fa3b417efac Mon Sep 17 00:00:00 2001
+From: xanadu-dev <xanadu.dev@xanadu.ie>
+Date: Thu, 27 Jun 2024 09:35:17 +0100
+Subject: [PATCH 1/6] Update wrappers.go
+
+Disable version compatibility checks
+---
+ restore/wrappers.go | 5 +++--
+ 1 file changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/restore/wrappers.go b/restore/wrappers.go
+index 2501e8e..d9c1520 100644
+--- a/restore/wrappers.go
++++ b/restore/wrappers.go
+@@ -130,8 +130,9 @@ func SetMaxCsvLineLengthQuery(connectionPool *dbconn.DBConn) string {
+ func InitializeBackupConfig() {
+ 	backupConfig = history.ReadConfigFile(globalFPInfo.GetConfigFilePath())
+ 	utils.InitializePipeThroughParameters(backupConfig.Compressed, backupConfig.CompressionType, 0)
+-	report.EnsureBackupVersionCompatibility(backupConfig.BackupVersion, version)
+-	report.EnsureDatabaseVersionCompatibility(backupConfig.DatabaseVersion, connectionPool.Version)
++	// Disable the following two version checks to allow Greenplum backups to be imported
++	// report.EnsureBackupVersionCompatibility(backupConfig.BackupVersion, version)
++	// report.EnsureDatabaseVersionCompatibility(backupConfig.DatabaseVersion, connectionPool.Version)
+ }
+ 
+ func BackupConfigurationValidation() {
+
+From aa8f03bd659103e1c5c8c84718475694310df1dc Mon Sep 17 00:00:00 2001
+From: xanadu-dev <xanadu.dev@xanadu.ie>
+Date: Thu, 27 Jun 2024 09:42:29 +0100
+Subject: [PATCH 2/6] Update go.mod
+
+Fix error invalid go version '1.21.4': must match format 1.23
+---
+ go.mod | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/go.mod b/go.mod
+index 628f1dd..0f7816e 100644
+--- a/go.mod
++++ b/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/cloudberrydb/gpbackup
+ 
+-go 1.21.4
++go 1.20
+ 
+ require (
+ 	github.com/DATA-DOG/go-sqlmock v1.5.0
+@@ -46,4 +46,4 @@ require (
+ 	golang.org/x/net v0.19.0 // indirect
+ 	golang.org/x/text v0.14.0 // indirect
+ 	gopkg.in/yaml.v3 v3.0.1 // indirect
+-)
+\ No newline at end of file
++)
+
+From 7cd27e0a607f939bdbb62576fac04a6f670c6e6c Mon Sep 17 00:00:00 2001
+From: xanadu-dev <xanadu.dev@xanadu.ie>
+Date: Thu, 27 Jun 2024 09:57:22 +0100
+Subject: [PATCH 3/6] Update go.mod
+
+revert previous change
+---
+ go.mod | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/go.mod b/go.mod
+index 0f7816e..09a84f3 100644
+--- a/go.mod
++++ b/go.mod
+@@ -1,6 +1,6 @@
+ module github.com/cloudberrydb/gpbackup
+ 
+-go 1.20
++go 1.21.4
+ 
+ require (
+ 	github.com/DATA-DOG/go-sqlmock v1.5.0
+
+From bb1934e9038aa44ff7b472f5d7891a640f2c4d60 Mon Sep 17 00:00:00 2001
+From: xanadu-dev <xanadu.dev@xanadu.ie>
+Date: Thu, 27 Jun 2024 10:10:11 +0100
+Subject: [PATCH 4/6] Update report.go
+
+---
+ report/report.go | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/report/report.go b/report/report.go
+index d75a366..052531a 100644
+--- a/report/report.go
++++ b/report/report.go
+@@ -298,8 +298,8 @@ func EnsureBackupVersionCompatibility(backupVersion string, restoreVersion strin
+ 	restoreSemVer, err := semver.Make(restoreVersion)
+ 	gplog.FatalOnError(err)
+ 	if backupSemVer.GT(restoreSemVer) {
+-		gplog.Fatal(errors.Errorf("gprestore %s cannot restore a backup taken with gpbackup %s; please use gprestore %s or later.",
+-			restoreVersion, backupVersion, backupVersion), "")
++		gplog.Warn("gprestore %s cannot restore a backup taken with gpbackup %s; please use gprestore %s or later.",
++			restoreVersion, backupVersion, backupVersion)
+ 	}
+ }
+ 
+@@ -309,7 +309,7 @@ func EnsureDatabaseVersionCompatibility(backupGPDBVersion string, restoreGPDBVer
+ 	backupGPDBSemVer, err := semver.Make(threeDigitVersion)
+ 	gplog.FatalOnError(err)
+ 	if backupGPDBSemVer.Major > restoreGPDBVersion.SemVer.Major {
+-		gplog.Fatal(errors.Errorf("Cannot restore from GPDB version %s to %s due to catalog incompatibilities.", backupGPDBVersion, restoreGPDBVersion.VersionString), "")
++		gplog.Warn("Cannot restore from GPDB version %s to %s due to catalog incompatibilities.", backupGPDBVersion, restoreGPDBVersion.VersionString)
+ 	}
+ }
+ 
+
+From 9fa909f51ff3321b0dac5f3472bfe0c9dd953105 Mon Sep 17 00:00:00 2001
+From: xanadu-dev <xanadu.dev@xanadu.ie>
+Date: Thu, 27 Jun 2024 10:11:06 +0100
+Subject: [PATCH 5/6] Update wrappers.go
+
+Reinstate version checks but change to warning
+---
+ restore/wrappers.go | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/restore/wrappers.go b/restore/wrappers.go
+index d9c1520..2501e8e 100644
+--- a/restore/wrappers.go
++++ b/restore/wrappers.go
+@@ -130,9 +130,8 @@ func SetMaxCsvLineLengthQuery(connectionPool *dbconn.DBConn) string {
+ func InitializeBackupConfig() {
+ 	backupConfig = history.ReadConfigFile(globalFPInfo.GetConfigFilePath())
+ 	utils.InitializePipeThroughParameters(backupConfig.Compressed, backupConfig.CompressionType, 0)
+-	// Disable the following two version checks to allow Greenplum backups to be imported
+-	// report.EnsureBackupVersionCompatibility(backupConfig.BackupVersion, version)
+-	// report.EnsureDatabaseVersionCompatibility(backupConfig.DatabaseVersion, connectionPool.Version)
++	report.EnsureBackupVersionCompatibility(backupConfig.BackupVersion, version)
++	report.EnsureDatabaseVersionCompatibility(backupConfig.DatabaseVersion, connectionPool.Version)
+ }
+ 
+ func BackupConfigurationValidation() {
+
+From c3b7867e9c5d4c33a05c5121427eef6f1a783e55 Mon Sep 17 00:00:00 2001
+From: xanadu-dev <xanadu.dev@xanadu.ie>
+Date: Thu, 27 Jun 2024 10:14:47 +0100
+Subject: [PATCH 6/6] Update report.go
+
+remove github.com/pkg/errors
+---
+ report/report.go | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/report/report.go b/report/report.go
+index 052531a..bdeaefd 100644
+--- a/report/report.go
++++ b/report/report.go
+@@ -17,7 +17,6 @@ import (
+ 	"github.com/cloudberrydb/gp-common-go-libs/operating"
+ 	"github.com/cloudberrydb/gpbackup/history"
+ 	"github.com/cloudberrydb/gpbackup/utils"
+-	"github.com/pkg/errors"
+ 	"gopkg.in/yaml.v2"
+ )
+ 
